@@ -1,4 +1,5 @@
 let backpackEventSource = null;
+let backpackEventWatchdog = null;
 let backpackPollTimer = null;
 let backpackPollInterval = 0;
 let backpackRefreshTimer = null;
@@ -9,6 +10,8 @@ function stopBackpackRealtime() {
         backpackEventSource.close();
         backpackEventSource = null;
     }
+    clearTimeout(backpackEventWatchdog);
+    backpackEventWatchdog = null;
     clearTimeout(backpackRefreshTimer);
     backpackRefreshTimer = null;
     clearInterval(backpackPollTimer);
@@ -61,7 +64,14 @@ function startBackpackRealtime(role) {
         try {
             const es = new EventSource(getRtdbBase() + '/' + path);
             backpackEventSource = es;
-            const onEvent = () => { if (backpackEventSource === es) scheduleBackpackRefresh(); };
+            let gotEvent = false;
+            const onEvent = () => {
+                if (backpackEventSource !== es) return;
+                gotEvent = true;
+                clearTimeout(backpackEventWatchdog);
+                backpackEventWatchdog = null;
+                scheduleBackpackRefresh();
+            };
             es.addEventListener('put', onEvent);
             es.addEventListener('patch', onEvent);
             es.onerror = () => {
@@ -72,6 +82,14 @@ function startBackpackRealtime(role) {
                     setBackpackPolling(3000);
                 }
             };
+            // 8 秒內完全沒收到事件就視為 SSE 不可用，改用輪詢
+            backpackEventWatchdog = setTimeout(() => {
+                if (backpackEventSource === es && !gotEvent) {
+                    es.close();
+                    backpackEventSource = null;
+                    setBackpackPolling(3000);
+                }
+            }, 8000);
         } catch (e) {
             backpackEventSource = null;
         }
