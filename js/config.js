@@ -1,5 +1,5 @@
 const APP_CONFIG = {
-    version: '1.1.2',
+    version: '1.1.3',
     nightlyBrowserReminder: false,
     // 注意：Token 寫在 config.js 等於公開（原始碼任何人可見），如需保密請改用網頁「設定」輸入
     // 「設定」輸入的 Token 存在 localStorage，會覆蓋此預設值；若外洩請到 @BotFather /revoke 後換新

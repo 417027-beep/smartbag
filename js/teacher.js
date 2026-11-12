@@ -21,6 +21,7 @@ async function initTeacherView() {
 
     await fetchScheduleData();
     refreshTeacherBackpacks();
+    startBackpackRealtime('teacher');
 }
 
 function switchTeacherTab(tabName) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smartbag-v33'; // v33 改用 WSS 安全連線，支援 HTTPS 網站
+const CACHE_NAME = 'smartbag-v34'; // v34 書包狀態即時同步（SSE + 輪詢備援）
 const CORE_ASSETS = [
     './',
     './index.html',
@@ -16,6 +16,7 @@ const CORE_ASSETS = [
     './js/mqtt.js',
     './js/gps-map.js',
     './js/nightly.js',
+    './js/realtime.js',
     './js/app.js',
     './manifest.webmanifest',
     './icons/icon-192.png',

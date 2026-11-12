@@ -66,6 +66,7 @@ function clearSavedLogin() {
 
 function doLogout() {
     if (typeof stopMQTT === 'function') stopMQTT();
+    if (typeof stopBackpackRealtime === 'function') stopBackpackRealtime();
     selectedPackingStudent = '';
     packingLiveBackup = null;
     itemsToPack = [];

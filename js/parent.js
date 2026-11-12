@@ -22,6 +22,7 @@ async function initParentView() {
     await ensureCommonDataParent();
     await loadChildBackpack();
     initMQTT();
+    startBackpackRealtime('parent');
 }
 
 async function loadChildBackpack() {
