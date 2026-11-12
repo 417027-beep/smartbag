@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧書包 - 權限管理系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="智慧書包">
+</head>
+<body>
+
+    <!-- ==================== LOGIN VIEW ==================== -->
+    <div id="view-login" class="view-section login-wrapper">
+        <div class="login-card">
+            <div style="text-align:center;font-size:48px;margin-bottom:12px;">🎒</div>
+            <h1>智慧書包</h1>
+            <p class="subtitle">班級書包管理系統</p>
+            <input type="text" id="login-username" class="login-input" placeholder="帳號 (tea / stua / para ...)">
+            <input type="password" id="login-password" class="login-input" placeholder="密碼 (與帳號相同)">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;margin:8px 0 8px;cursor:pointer;"><input type="checkbox" id="remember-login" checked> 記住登入（下次自動登入）</label>
+            <div id="login-error" class="login-error"></div>
+            <button class="btn btn-primary btn-login" onclick="doLogin()">登入</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;color:#6366f1;border-color:#e0e7ff;background:#eef2ff;" onclick="clearSavedLogin()">清除自動登入</button>
+            <div style="margin-top:16px;font-size:12px;color:#64748b;text-align:center;">
+                教師: tea<br>
+                小朋友: stua ~ stue<br>
+                父母親: para ~ pare
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TEACHER VIEW ==================== -->
+    <div id="view-teacher" class="view-section hidden">
+        <div class="app-container">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="logo"><i class="fas fa-chalkboard-teacher fa-lg"></i></div>
+                    <div><strong>老師儀表板</strong><br><span class="topbar-user" id="teacher-user-label"></span></div>
+                </div>
+                <div class="topbar-right">
+                    <span id="app-version" class="text-xs" style="color:#475569;font-family:monospace;">v?</span>
+                    <button class="btn btn-outline btn-sm" onclick="showSettings()"><i class="fas fa-cog"></i> 設定</button>
+                    <button class="btn btn-danger btn-sm" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> 登出</button>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tab-bar">
+                <button class="tab active" data-tab="schedule" onclick="switchTeacherTab('schedule')">📅 課表管理</button>
+                <button class="tab" data-tab="backpack" onclick="switchTeacherTab('backpack')">🎒 書包管理</button>
+            </div>
+
+            <!-- ===== SCHEDULE TAB ===== -->
+            <div id="tab-schedule" class="tab-panel">
+                <div class="flex items-center gap-3 mb-4 px-1">
+                    <i class="fas fa-clock" style="color:#6366f1;"></i>
+                    <span id="current-time-display" style="color:#94a3b8;font-size:14px;">載入時間中...</span>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col" style="background:#1e293b;border-color:#334155;">
+                        <div class="p-6 border-b border-gray-100 flex justify-between items-center" style="border-color:#334155;">
+                            <h2 class="text-xl font-bold" style="color:#f1f5f9;"><i class="fas fa-calendar-alt text-indigo-500 mr-2"></i>本週課表</h2>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs" style="color:#64748b;"><i class="fas fa-hand-pointer"></i> 點擊科目可直接修改</span>
+                                <span id="status-badge" class="px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1" style="background:#fef3c7;color:#92400e;">
+                                    <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> 連線中...
+                                </span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto no-scrollbar p-6 flex-grow">
+                            <table class="w-full min-w-[600px] border-collapse" id="schedule-table">
+                                <thead>
+                                    <tr class="text-center">
+                                        <th class="p-3 font-medium" style="color:#64748b;width:60px;">節次</th>
+                                        <th class="p-3 font-semibold" style="color:#cbd5e1;background:#1e293b;" data-day="1">星期一</th>
+                                        <th class="p-3 font-semibold" style="color:#cbd5e1;background:#1e293b;" data-day="2">星期二</th>
+                                        <th class="p-3 font-semibold" style="color:#cbd5e1;background:#1e293b;" data-day="3">星期三</th>
+                                        <th class="p-3 font-semibold" style="color:#cbd5e1;background:#1e293b;" data-day="4">星期四</th>
+                                        <th class="p-3 font-semibold" style="color:#cbd5e1;background:#1e293b;" data-day="5">星期五</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="schedule-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 border-t flex gap-3 flex-wrap" style="border-color:#334155;background:#0f172a;">
+                            <button onclick="generateRandomSchedule()" class="btn btn-outline btn-sm"><i class="fas fa-dice"></i> 隨機產生</button>
+                            <button onclick="resetToDefaultSchedule()" class="btn btn-outline btn-sm"><i class="fas fa-undo"></i> 重設預設課表</button>
+                            <button onclick="fetchScheduleData()" class="btn btn-outline btn-sm"><i class="fas fa-sync-alt"></i> 同步 Firebase</button>
+                            <label class="flex items-center gap-2 text-sm" style="color:#94a3b8;">
+                                <input type="checkbox" id="autosave-toggle" checked>
+                                自動儲存
+                            </label>
+                            <button onclick="saveToCloud()" id="save-btn" class="hidden btn btn-success btn-sm"><i class="fas fa-cloud-upload-alt" id="save-icon"></i> <span id="save-btn-text">儲存</span></button>
+                            <a href="https://project-4645226313484723906-default-rtdb.asia-southeast1.firebasedatabase.app/schedule.json" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-database"></i> Firebase JSON</a>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-4 space-y-6">
+                        <!-- RFID Packing -->
+                        <div class="rounded-2xl shadow-sm p-6 relative overflow-hidden" style="background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid #334155;">
+                            <div class="relative z-10">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-bold" style="color:#f1f5f9;"><i class="fas fa-wifi mr-2 text-blue-400"></i>RFID 智慧盤點</h3>
+                                </div>
+                                <div class="flex items-center justify-between mb-4 p-2 rounded-lg" style="background:rgba(0,0,0,0.3);">
+                                    <span class="text-sm font-medium" style="color:#a5b4fc;">檢測目標：</span>
+                                    <select id="target-day-select" onchange="onTargetDayChange()" class="text-sm rounded-lg p-1.5 outline-none cursor-pointer" style="background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.3);color:#fff;">
+                                        <option value="mon">星期一</option>
+                                        <option value="tue">星期二</option>
+                                        <option value="wed">星期三</option>
+                                        <option value="thu">星期四</option>
+                                        <option value="fri">星期五</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center justify-between mb-3 p-2 rounded-lg" style="background:rgba(0,0,0,0.3);">
+                                    <span class="text-sm font-medium" style="color:#a5b4fc;">檢視學生：</span>
+                                    <select id="packing-student-select" onchange="onPackingStudentChange()" class="text-sm rounded-lg p-1.5 outline-none cursor-pointer" style="background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.3);color:#fff;">
+                                    </select>
+                                </div>
+                                <div id="packing-student-badge" style="display:none;font-size:12px;color:#a5b4fc;margin-bottom:8px;"></div>
+                                <div class="rounded-xl p-4 min-h-[120px]" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);">
+                                <ul id="packing-list" class="space-y-3 text-sm font-medium"></ul>
+                            </div>
+                            <div class="mt-4 flex justify-end">
+                                <button onclick="checkPackingComplete()" class="btn btn-success btn-sm"><i class="fas fa-clipboard-check"></i> 完成盤點</button>
+                            </div>
+                        </div>
+                        </div>
+
+                        <!-- Hardware -->
+                        <div class="rounded-2xl shadow-sm p-6" style="background:#1e293b;border:1px solid #334155;">
+                            <h3 class="font-bold mb-4" style="color:#f1f5f9;"><i class="fas fa-tachometer-alt text-blue-500 mr-2"></i>硬體感測</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="p-3 rounded-xl" style="background:#0f172a;border:1px solid #334155;">
+                                    <span class="block text-xs mb-1" style="color:#64748b;">外部 LED</span>
+                                    <span class="flex items-center gap-2 text-sm font-bold">
+                                        <span id="led-indicator" class="w-3 h-3 rounded-full" style="background:#facc15;box-shadow:0 0 8px rgba(250,204,21,0.8);"></span>
+                                        <span id="led-text" style="color:#facc15;">待命中</span>
+                                    </span>
+                                </div>
+                                <div class="p-3 rounded-xl" style="background:#0f172a;border:1px solid #334155;">
+                                    <span class="block text-xs mb-1" style="color:#64748b;">GPS 定位</span>
+                                    <span class="flex items-center gap-2 text-sm font-bold" style="color:#60a5fa;">
+                                        <i class="fas fa-map-marker-alt"></i> <span title="預設位置：國立虎尾科技大學（雲林）" id="gps-coord-text">23.703108, 120.430151</span>
+                                    </span>
+                                    <span class="block text-xs mt-1" style="color:#64748b;">更新：<span id="gps-update-time">--:--:--</span></span>
+                                </div>
+                            </div>
+                            <div id="gps-map" class="mt-4 rounded-xl" style="height:180px;border:1px solid #334155;position:relative;z-index:1;"></div>
+                        </div>
+
+                        <!-- MQTT -->
+                        <div class="rounded-2xl shadow-sm p-6" style="background:#1e293b;border:1px solid #334155;">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold" style="color:#f1f5f9;"><i class="fas fa-network-wired text-purple-500 mr-2"></i>MQTT 感測</h3>
+                                <span id="mqtt-status-badge" class="px-2 py-1 text-xs rounded-full flex items-center gap-1" style="background:#fef3c7;color:#92400e;">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span> 連線中...
+                                </span>
+                            </div>
+                            <div class="text-xs mb-3 space-y-2" style="color:#64748b;">
+                                <p><strong>伺服器：</strong> mqttgo.io:8000 (WS)</p>
+                                <p><strong>頻道：</strong> <span class="font-mono px-1 rounded" style="color:#60a5fa;background:rgba(59,130,246,0.1);">SmartBackpack7777/RFID</span></p>
+                            </div>
+                            <div class="flex gap-2 mt-4 pt-4 items-center" style="border-top:1px solid #334155;">
+                                <select id="mqtt-test-subject" class="text-sm rounded-lg p-2 outline-none" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;width:33%;">
+                                    <option value="國語文">國語文</option>
+                                </select>
+                                <button onclick="publishTestMqtt('yes')" class="flex-1 py-2 rounded-lg text-sm font-bold text-center" style="background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.3);">✅ YES</button>
+                                <button onclick="publishTestMqtt('no')" class="flex-1 py-2 rounded-lg text-sm font-bold text-center" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">❌ NO</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== BACKPACK TAB ===== -->
+            <div id="tab-backpack" class="tab-panel hidden">
+                <div class="teacher-item-manager">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="section-title" style="margin-bottom:0;"><i class="fas fa-list"></i> 管理需攜帶品項</h3>
+                        <button class="btn btn-outline btn-sm" onclick="refreshTeacherItems()"><i class="fas fa-sync-alt"></i> 刷新</button>
+                    </div>
+                    <div class="teacher-item-form">
+                        <input type="text" id="teacher-item-input" class="login-input" placeholder="輸入品項名稱，按 Enter 新增" style="margin-bottom:0;" onkeydown="if(event.key==='Enter')addTeacherItem()">
+                        <select id="teacher-item-cat" class="login-input" style="margin-bottom:0;width:130px;">
+                            <option value="book">課本</option>
+                            <option value="notebook">作業簿</option>
+                            <option value="stationery">文具</option>
+                            <option value="equipment">裝備</option>
+                            <option value="other">其他</option>
+                        </select>
+                        <button class="btn btn-success" onclick="addTeacherItem()"><i class="fas fa-plus"></i> 新增</button>
+                    </div>
+                    <div id="teacher-item-list"></div>
+                </div>
+
+                <h3 class="section-title"><i class="fas fa-users"></i> 全班書包監控儀表板</h3>
+                <div id="teacher-backpacks" class="backpack-grid"></div>
+
+                <div style="text-align:center;margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                    <button id="teacher-report-btn" class="btn btn-primary btn-lg" onclick="sendClassReport()">
+                        <i class="fab fa-telegram-plane"></i> 發送班級報告到 Telegram
+                    </button>
+                    <button id="nightly-test-btn" class="btn btn-lg" onclick="testNightlyReminder()" style="background:#f59e0b;color:#fff;">
+                        <i class="fas fa-moon"></i> 立即測試 22:00 提醒
+                    </button>
+                </div>
+                <div id="nightly-hint" style="text-align:center;font-size:12px;color:#94a3b8;margin-top:8px;">⏰ 每晚 22:00 與每天早上 06:00 由本機排程自動提醒</div>
+
+                <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:20px;margin-top:20px;">
+                    <h3 class="section-title" style="color:#f1f5f9;margin-top:0;"><i class="fas fa-paper-plane text-blue-400 mr-2"></i>發送訊息到 Telegram</h3>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+                        <select id="msg-target" class="login-input" style="margin-bottom:0;width:170px;background:#0f172a;border-color:#334155;color:#e2e8f0;">
+                            <option value="parents">👪 所有家長</option>
+                            <option value="students">🎒 所有學生</option>
+                            <optgroup label="學生">
+                                <option value="stua">小明 stua</option>
+                                <option value="stub">小華 stub</option>
+                                <option value="stuc">小美 stuc</option>
+                                <option value="stud">小傑 stud</option>
+                                <option value="stue">小安 stue</option>
+                            </optgroup>
+                            <optgroup label="家長">
+                                <option value="para">小明家長 para</option>
+                                <option value="parb">小華家長 parb</option>
+                                <option value="parc">小美家長 parc</option>
+                                <option value="pard">小傑家長 pard</option>
+                                <option value="pare">小安家長 pare</option>
+                            </optgroup>
+                        </select>
+                        <button onclick="sendTeacherMessage()" class="btn btn-success"><i class="fas fa-paper-plane"></i> 送出</button>
+                    </div>
+                    <textarea id="msg-input" class="login-input" rows="3" placeholder="輸入要傳送的訊息...（此訊息會直接送到指定對象的 Telegram）" style="background:#0f172a;border-color:#334155;color:#e2e8f0;"></textarea>
+                    <div id="msg-result" style="font-size:12px;color:#94a3b8;margin-top:8px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== PARENT VIEW ==================== -->
+    <div id="view-parent" class="view-section hidden">
+        <div class="app-container">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="logo"><i class="fas fa-user-friends fa-lg"></i></div>
+                    <div><strong id="parent-child-name"></strong><br><span class="topbar-user" id="parent-user-label"></span></div>
+                </div>
+                <div class="topbar-right">
+                    <span id="app-version" class="text-xs" style="color:#475569;font-family:monospace;">v?</span>
+                    <button class="btn btn-outline btn-sm" onclick="showSettings()"><i class="fas fa-cog"></i> 設定</button>
+                    <button class="btn btn-danger btn-sm" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> 登出</button>
+                </div>
+            </div>
+            <div class="view-panel">
+                <h2><i class="fas fa-backpack"></i> 小朋友的書包</h2>
+                <p class="subtitle">即時查看書包收拾狀況</p>
+                <div style="padding:12px;margin:12px 0;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;font-size:13px;overflow-wrap:anywhere;" role="status" aria-live="polite">
+                    <strong data-mqtt-status>MQTT 尚未連線</strong>
+                    <div data-mqtt-topic>等待登入學生頻道</div>
+                    <div data-mqtt-last>尚未收到刷卡訊息；連線成功不代表讀卡器已連線。</div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="stopMQTT(); initMQTT();">重新連線</button>
+                </div>
+                <div class="backpack-large"><canvas id="parent-backpack" class="backpack-canvas" height="340"></canvas></div>
+                <div id="parent-summary" class="summary-text">載入中...</div>
+                <div class="progress-container"><div id="parent-progress-bar" class="progress-bar" style="width:0%"></div></div>
+                <div id="parent-item-list" class="item-list"></div>
+                <button id="parent-remind-btn" class="btn btn-lg" onclick="sendParentReminderBtn()" style="width:100%;background:#f59e0b;color:#fff;">
+                    <i class="fab fa-telegram-plane"></i> 提醒小朋友收拾書包
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== STUDENT VIEW ==================== -->
+    <div id="view-student" class="view-section hidden">
+        <div class="app-container">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="logo"><i class="fas fa-user-graduate fa-lg"></i></div>
+                    <div><strong>我的書包</strong><br><span class="topbar-user" id="student-user-label"></span></div>
+                </div>
+                <div class="topbar-right">
+                    <button class="btn btn-danger btn-sm" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> 登出</button>
+                </div>
+            </div>
+            <div class="view-panel">
+                <h2><i class="fas fa-backpack"></i> 我的書包</h2>
+                <p class="subtitle">點擊物品切換放入狀態</p>
+                <div style="padding:12px;margin:12px 0;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;font-size:13px;overflow-wrap:anywhere;" role="status" aria-live="polite">
+                    <strong data-mqtt-status>MQTT 尚未連線</strong>
+                    <div data-mqtt-topic>等待登入學生頻道</div>
+                    <div data-mqtt-last>尚未收到刷卡訊息；連線成功不代表讀卡器已連線。</div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="stopMQTT(); initMQTT();">重新連線</button>
+                </div>
+                <section style="padding:16px;margin:12px 0;border:1px solid #a5b4fc;border-radius:12px;background:#eef2ff;overflow-wrap:anywhere;">
+                    <h3 style="margin:0 0 8px;">刷卡測試</h3>
+                    <p style="font-size:13px;">按「開始刷卡測試」，再拿實體卡靠近讀卡器。下方會顯示網頁收到的資料。</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="startRfidDiagnostic()">開始刷卡測試</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="testMqttRoundTrip()">測試 MQTT 收發</button>
+                    </div>
+                    <div id="rfid-test-result" role="status" aria-live="polite">尚未開始測試</div>
+                    <div id="rfid-test-details" style="font-size:13px;white-space:pre-wrap;margin-top:8px;"></div>
+                    <div id="mqtt-test-result" role="status" aria-live="polite" style="font-size:13px;margin-top:8px;">MQTT 收發測試尚未開始</div>
+                    <p style="font-size:12px;margin-bottom:0;">收發測試只確認網頁與伺服器通訊。實際刷卡仍會照常更新書包與 LED。</p>
+                </section>
+                <div class="backpack-large"><canvas id="student-backpack" class="backpack-canvas" height="340"></canvas></div>
+                <div id="student-summary" class="summary-text">載入中...</div>
+                <div class="progress-container"><div id="student-progress-bar" class="progress-bar" style="width:0%"></div></div>
+                <div id="student-item-list" class="item-list"></div>
+                <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;">
+                    <label for="led-anim-mode" style="font-weight:600;white-space:nowrap;">LED 動畫</label>
+                    <select id="led-anim-mode" onchange="onLedAnimModeChange()" style="flex:1;padding:8px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;">
+                        <option value="chick">小雞吃飼料</option>
+                        <option value="blocks">方塊疊疊樂</option>
+                    </select>
+                </div>
+                <button id="student-confirm-btn" class="btn btn-primary btn-lg pulse" onclick="confirmPacked()" style="width:100%;" disabled>✅ 確認收拾完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- 科目選擇 Modal -->
+    <div id="subject-modal" class="modal-overlay hidden">
+        <div id="subject-modal-content" class="modal-content" style="max-width:450px;">
+            <div class="flex justify-between items-center mb-4">
+                <h3><i class="fas fa-edit text-indigo-500 mr-2"></i>選擇科目</h3>
+                <button onclick="closeSubjectModal()" class="btn btn-outline btn-sm"><i class="fas fa-times"></i></button>
+            </div>
+            <p class="text-sm mb-4" style="color:#94a3b8;" id="editing-cell-info">正在修改：</p>
+            <div class="grid grid-cols-4 gap-3" id="subject-modal-grid"></div>
+        </div>
+    </div>
+
+    <!-- 盤點結果 Modal -->
+    <div id="result-modal" class="modal-overlay hidden">
+        <div id="result-modal-content" class="modal-content" style="max-width:380px;text-align:center;">
+            <h3 id="result-modal-title" class="mb-4">盤點結果</h3>
+            <div id="result-modal-body" class="mb-4"></div>
+            <button onclick="closeResultModal()" class="btn btn-primary">我知道了</button>
+        </div>
+    </div>
+
+    <!-- Settings Modal（Telegram + Firebase + Excel） -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3><i class="fas fa-cog"></i> 系統設定</h3>
+
+            <div class="mb-6 p-4 rounded-xl" style="background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);">
+                <h4 class="font-bold mb-2" style="color:#34d399;"><i class="fab fa-telegram-plane mr-1"></i>Telegram Bot</h4>
+                <div class="tg-input-group">
+                    <input type="text" id="tg-token-input" class="login-input" placeholder="輸入 Telegram Bot Token" style="margin-bottom:0;">
+                    <button class="btn btn-success btn-sm" onclick="saveTgToken()">儲存</button>
+                </div>
+                <label style="font-size:13px;color:#94a3b8;display:block;margin-bottom:6px;">已綁定聊天</label>
+                <ul id="tg-chat-list" class="mb-2"></ul>
+                <label style="font-size:13px;color:#94a3b8;display:block;margin-bottom:6px;">手動綁定</label>
+                <div class="tg-input-group">
+                    <select id="tg-bind-parent" class="login-input" style="margin-bottom:0;width:110px;">
+                        <option value="tea">tea</option>
+                        <option value="stua">stua</option>
+                        <option value="stub">stub</option>
+                        <option value="stuc">stuc</option>
+                        <option value="stud">stud</option>
+                        <option value="stue">stue</option>
+                        <option value="para">para</option>
+                        <option value="parb">parb</option>
+                        <option value="parc">parc</option>
+                        <option value="pard">pard</option>
+                        <option value="pare">pare</option>
+                    </select>
+                    <input type="text" id="tg-bind-chatid" class="login-input" placeholder="Chat ID" style="margin-bottom:0;">
+                    <button class="btn btn-success btn-sm" onclick="bindParentChat()">綁定</button>
+                </div>
+                <p style="font-size:12px;color:#64748b;">💡 Chat ID 怎麼取得：點「chatId 取得方式」查看說明</p>
+                <details style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-top:8px;">
+                    <summary style="cursor:pointer;font-weight:600;color:#4338ca;"><i class="fas fa-question-circle"></i> chatId 取得方式</summary>
+                    <ol style="margin:10px 0 0 18px;line-height:1.8;list-style:decimal;">
+                        <li>用你的 Telegram 帳號對本 Bot（@Smartbackup777_bot）傳送任意訊息，例如 <code style="background:#eef2ff;padding:1px 6px;border-radius:6px;">/start para</code></li>
+                        <li>向 <code style="background:#eef2ff;padding:1px 6px;border-radius:6px;">@userinfobot</code> 傳一句話，它會回覆你的 <code>Id: 8263473085</code>，那就是 Chat ID</li>
+                        <li>或由老師登入網頁，開啟瀏覽器 DevTools 查看 Telegram API 回傳，或直接問系統管理員</li>
+                        <li>拿到號碼後，在上方「手動綁定」選帳號並貼上 Chat ID → 綁定</li>
+                    </ol>
+                    <p style="margin-top:8px;">⚠️ 目前綁定：para~pare 都已對 Bot 傳過 /start，webhook 部署後即會自動寫入。</p>
+                </details>
+            </div>
+
+            <div class="mb-6 p-4 rounded-xl" style="background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);">
+                <h4 class="font-bold mb-2" style="color:#fbbf24;"><i class="fas fa-fire mr-1"></i>Firebase Realtime Database</h4>
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="rtdb-url-input" class="login-input" style="margin-bottom:0;" placeholder="https://....firebaseio.com/schedule.json">
+                    <button onclick="testFirebaseConnection()" id="test-connection-btn" class="btn btn-primary btn-sm shrink-0"><i id="test-icon" class="fas fa-vial"></i> 測試</button>
+                </div>
+                <div id="test-result-box" class="hidden text-xs font-mono p-3 rounded-lg"></div>
+            </div>
+
+            <div class="p-4 rounded-xl" style="background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.2);">
+                <h4 class="font-bold mb-2" style="color:#818cf8;"><i class="fas fa-file-excel mr-1"></i>Excel 匯入 / 匯出</h4>
+                <div class="flex gap-2">
+                    <button onclick="exportToExcel()" class="btn btn-primary btn-sm"><i class="fas fa-download"></i> 匯出</button>
+                    <button onclick="triggerExcelImport()" class="btn btn-outline btn-sm"><i class="fas fa-upload"></i> 匯入</button>
+                    <input type="file" id="excel-file-input" accept=".csv" class="hidden" onchange="importFromExcel(event)">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="hideSettings()">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/firebase-db.js"></script>
+    <script src="js/telegram.js"></script>
+    <script src="js/backpack.js"></script>
+    <script src="js/teacher.js"></script>
+    <script src="js/parent.js"></script>
+    <script src="js/student.js"></script>
+    <!-- 原本課表功能的 JS -->
+    <script src="js/schedule.js"></script>
+    <script src="js/packing.js"></script>
+    <script src="js/mqtt.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/gps-map.js"></script>
+    <script src="js/nightly.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .catch(err => console.warn('Service Worker 註冊失敗:', err));
+            });
+        }
+    </script>
+</body>
+</html>
